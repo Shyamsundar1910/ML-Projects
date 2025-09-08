@@ -1,0 +1,218 @@
+BACKEND:
+import json
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse
+import numpy as np
+from sklearn.tree import DecisionTreeRegressor
+import pandas as pd
+import matplotlib.pyplot as plt
+import io
+
+# Load and train the model
+data = pd.read_csv(r'C:\Users\shyam\Desktop\New folder\New Text Document.csv')
+last_10_days = data.tail(10)  # Keep "Date" column for frontend
+numeric_data = data.drop(columns=["Date"])
+
+x = numeric_data[["Open", "High", "Low"]].to_numpy()
+y = numeric_data["Close"].to_numpy()
+
+model = DecisionTreeRegressor()
+model.fit(x, y)
+
+class PredictHandler(SimpleHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        
+        try:
+            input_data = json.loads(post_data)
+            features = np.array([[float(input_data["Open"]), 
+                                  float(input_data["High"]), 
+                                  float(input_data["Low"])]])
+            prediction = model.predict(features)[0]
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"Predicted Rate": prediction}).encode())
+        
+        except (KeyError, ValueError) as e:
+            self.send_response(400)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": f"Invalid input: {str(e)}"}).encode())
+
+    def do_GET(self):
+        parsed_path = urlparse(self.path)
+        
+        if parsed_path.path == '/graph':
+            # (Optional) Serve image if the graph is needed in another way
+            pass
+        
+        elif parsed_path.path == '/last10days':
+            # Return last 10 days of data including Date and Close
+            response_data = last_10_days[["Date", "Close"]].to_dict(orient='records')
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response_data).encode())
+        
+        else:
+            super().do_GET()
+
+# Start the server
+PORT = 8080
+server = HTTPServer(('localhost', PORT), PredictHandler)
+print(f"Server running on http://localhost:{PORT}")
+server.serve_forever()
+
+
+
+FRONTEND:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INR-USD Prediction</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, rgba(245, 247, 250, 0.9), rgba(195, 207, 226, 0.9)), 
+                        url('') no-repeat center center fixed;
+            background-size: cover;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+    
+        .container {
+            background: rgba(255, 255, 255, 0.9); /* Slightly transparent background */
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+    
+        h1 {
+            color: #007BFF;
+            font-size: 26px;
+            margin-bottom: 20px;
+        }
+    
+        form, footer {
+            margin-bottom: 20px;
+        }
+    
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+    
+        button {
+            background: #007BFF;
+            color: #fff;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 16px;
+            width: 100%;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+    
+        button:hover {
+            background: #0056b3;
+        }
+    
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #28a745;
+        }
+    
+        #result.error {
+            color: #dc3545;
+        }
+    
+        #loader {
+            display: none;
+            margin-top: 10px;
+            font-size: 16px;
+            color: #007BFF;
+        }
+    </style>
+    
+</head>
+<body>
+    <div class="container">
+        <h1>Predict INR-USD Exchange Rate</h1>
+        <form id="predict-form">
+            <label for="open">Open:</label>
+            <input type="number" id="open" name="open" step="0.0000001" placeholder="Enter Open value" required>
+
+            <label for="high">High:</label>
+            <input type="number" id="high" name="high" step="0.0000001" placeholder="Enter High value" required>
+
+            <label for="low">Low:</label>
+            <input type="number" id="low" name="low" step="0.0000001" placeholder="Enter Low value" required>
+
+            <button type="submit">Predict</button>
+        </form>
+
+        <div id="loader">Loading prediction...</div>
+        <div id="result"></div>
+
+        <footer>
+            Powered by DecisionTreeRegressor | Demo App
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById("predict-form").addEventListener("submit", function(event) {
+            event.preventDefault();
+
+            const open = document.getElementById("open").value;
+            const high = document.getElementById("high").value;
+            const low = document.getElementById("low").value;
+            const resultDiv = document.getElementById("result");
+            const loader = document.getElementById("loader");
+
+            resultDiv.innerText = '';  // Clear previous result
+            loader.style.display = 'block';  // Show loading message
+
+            fetch("http://localhost:8080", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ Open: parseFloat(open), High: parseFloat(high), Low: parseFloat(low) })
+            })
+            .then(response => {
+                loader.style.display = 'none';  // Hide loading message
+                if (!response.ok) {
+                    throw new Error("Failed to fetch prediction");
+                }
+                return response.json();
+            })
+            .then(data => {
+                resultDiv.classList.remove("error");
+                resultDiv.innerText = `Predicted Rate: ${data["Predicted Rate"].toFixed(2)}`;
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                resultDiv.classList.add("error");
+                resultDiv.innerText = `Error: ${error.message}`;
+            });
+        });
+    </script>
+</body>
+</html>

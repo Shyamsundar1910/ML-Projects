@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INR-USD Prediction</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: 
+                 url('images/image.png') no-repeat center center fixed;
+            background-size: cover;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+    
+        .container {
+            background: rgba(255, 255, 255, 0.9); /* Slightly transparent background */
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+    
+        h1 {
+            color: #007BFF;
+            font-size: 26px;
+            margin-bottom: 20px;
+        }
+    
+        form, footer {
+            margin-bottom: 20px;
+        }
+    
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+    
+        button {
+            background: #007BFF;
+            color: #fff;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 16px;
+            width: 100%;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+    
+        button:hover {
+            background: #0056b3;
+        }
+    
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #28a745;
+        }
+    
+        #result.error {
+            color: #dc3545;
+        }
+    
+        #loader {
+            display: none;
+            margin-top: 10px;
+            font-size: 16px;
+            color: #007BFF;
+        }
+    </style>
+    
+</head>
+<body>
+    <div class="container">
+        <h1>Predict INR-USD Exchange Rate</h1>
+        <form id="predict-form">
+            <label for="open">Open:</label>
+            <input type="number" id="open" name="open" step="0.0000001" placeholder="Enter Open value" required>
+
+            <label for="high">High:</label>
+            <input type="number" id="high" name="high" step="0.0000001" placeholder="Enter High value" required>
+
+            <label for="low">Low:</label>
+            <input type="number" id="low" name="low" step="0.0000001" placeholder="Enter Low value" required>
+
+            <button type="submit">Predict</button>
+        </form>
+
+        <div id="loader">Loading prediction...</div>
+        <div id="result"></div>
+
+        
+    </div>
+
+    <script>
+        document.getElementById("predict-form").addEventListener("submit", function(event) {
+            event.preventDefault();
+
+            const open = document.getElementById("open").value;
+            const high = document.getElementById("high").value;
+            const low = document.getElementById("low").value;
+            const resultDiv = document.getElementById("result");
+            const loader = document.getElementById("loader");
+
+            resultDiv.innerText = '';  // Clear previous result
+            loader.style.display = 'block';  // Show loading message
+
+            fetch("http://localhost:8080", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ Open: parseFloat(open), High: parseFloat(high), Low: parseFloat(low) })
+            })
+            .then(response => {
+                loader.style.display = 'none';  // Hide loading message
+                if (!response.ok) {
+                    throw new Error("Failed to fetch prediction");
+                }
+                return response.json();
+            })
+            .then(data => {
+                resultDiv.classList.remove("error");
+                resultDiv.innerText = `Predicted Rate: ${data["Predicted Rate"].toFixed(2)}`;
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                resultDiv.classList.add("error");
+                resultDiv.innerText = `Error: ${error.message}`;
+            });
+        });
+    </script>
+</body>
+</html>
